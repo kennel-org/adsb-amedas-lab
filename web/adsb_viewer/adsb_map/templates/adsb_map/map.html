@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>ADS-B Map Viewer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+        crossorigin=""
+    />
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+
+        #map {
+            width: 100%;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""
+    ></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://d3js.org/d3-scale-chromatic.v3.min.js"></script>
+    <script>
+        const INITIAL_LAT = 34.95;
+        const INITIAL_LON = 139.9;
+        const INITIAL_ZOOM = 8;
+        const TOP_K_TRACKS = 100;
+        const MAX_GAP_SEC = 60;
+
+        const map = L.map("map").setView([INITIAL_LAT, INITIAL_LON], INITIAL_ZOOM);
+
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        }).addTo(map);
+
+        function groupByIcao24(points) {
+            const groups = {};
+            for (const p of points) {
+                if (!p.icao24) {
+                    continue;
+                }
+                if (!groups[p.icao24]) {
+                    groups[p.icao24] = [];
+                }
+                groups[p.icao24].push(p);
+            }
+            return groups;
+        }
+
+        function drawTracks(points) {
+            const groups = groupByIcao24(points);
+
+            const icao24List = Object.keys(groups)
+                .sort((a, b) => (groups[b]?.length ?? 0) - (groups[a]?.length ?? 0))
+                .slice(0, TOP_K_TRACKS);
+
+            icao24List.forEach((icao24) => {
+                const pts = groups[icao24]
+                    .filter((p) => p.lat !== null && p.lon !== null)
+                    .slice();
+
+                if (pts.length < 2) {
+                    return;
+                }
+
+                // Sort by time (ascending) so that older points come first
+                pts.sort((a, b) => {
+                    if (a.snapshot_time < b.snapshot_time) return -1;
+                    if (a.snapshot_time > b.snapshot_time) return 1;
+                    return 0;
+                });
+
+                // Compute time range for normalization
+                const times = pts.map((p) => Date.parse(p.snapshot_time));
+                const minTime = Math.min(...times);
+                const maxTime = Math.max(...times);
+
+                // Draw short polylines between consecutive points, colored by relative time
+                for (let i = 0; i < pts.length - 1; i++) {
+                    const p1 = pts[i];
+                    const p2 = pts[i + 1];
+
+                    const dtSec = (Date.parse(p2.snapshot_time) - Date.parse(p1.snapshot_time)) / 1000;
+                    if (dtSec > MAX_GAP_SEC) {
+                        continue;
+                    }
+
+                    // Normalize by position along the track (0..1) so the gradient is visible
+                    // even when time span is very large.
+                    const t = pts.length <= 1
+                        ? 1
+                        : (i + 1) / (pts.length - 1);
+
+                    // d3.interpolateTurbo(0) ~ blue, 1 ~ yellow/red
+                    const color = d3.interpolateTurbo(t);
+
+                    L.polyline(
+                        [
+                            [p1.lat, p1.lon],
+                            [p2.lat, p2.lon],
+                        ],
+                        { color, weight: 2, opacity: 0.8 }
+                    ).addTo(map);
+                }
+
+                // Place a marker at the latest point only if flight information exists
+                const last = pts[pts.length - 1];
+                if (last.flight) {
+                    const marker = L.marker([last.lat, last.lon]).addTo(map);
+
+                    const popupHtml = `
+                        <div>
+                            <div><strong>Flight:</strong> ${last.flight}</div>
+                            <div><strong>ICAO24:</strong> ${last.icao24}</div>
+                            <div><strong>Time (UTC):</strong> ${last.snapshot_time}</div>
+                            <div><strong>Alt baro:</strong> ${last.alt_baro ?? "(N/A)"}</div>
+                            <div><strong>GS:</strong> ${last.gs ?? "(N/A)"}</div>
+                            <div><strong>Track:</strong> ${last.track ?? "(N/A)"}</div>
+                        </div>
+                    `;
+
+                    marker.bindPopup(popupHtml);
+                }
+            });
+        }
+
+        function loadLatest() {
+            const url = "/api/latest/?limit=5000";
+
+            fetch(url)
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    if (!data || !Array.isArray(data.results)) {
+                        console.error("Unexpected API response", data);
+                        return;
+                    }
+                    drawTracks(data.results);
+                })
+                .catch((error) => {
+                    console.error("Failed to load latest ADS-B data", error);
+                });
+        }
+
+        loadLatest();
+    </script>
+</body>
+</html>

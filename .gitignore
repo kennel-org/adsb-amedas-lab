@@ -1,0 +1,20 @@
+# Python caches
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+
+# Logs
+*.log
+
+# Local env files (do not commit secrets)
+.env
+.env.web
+config/*/env/*.env
+
+# Django dev artifacts (web/adsb_viewer)
+web/adsb_viewer/db.sqlite3
+web/adsb_viewer/adsb_map/migrations/
+config/rigel/
+config/canopus/
