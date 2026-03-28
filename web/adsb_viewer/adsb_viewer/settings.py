@@ -79,14 +79,17 @@ import os
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "adsb_test",
-        "USER": "lab_ro",
-        "PASSWORD": os.environ.get("PGPASSWORD", ""),
-        "HOST": "127.0.0.1",
-        # Use explicit IPv4 loopback (127.0.0.1) instead of relying on "localhost" name resolution
-        "PORT": "5432",
+        "NAME": os.environ.get("PGDATABASE", "adsb_test"),
+        "USER": os.environ.get("PGUSER", "lab_ro"),
+        "HOST": os.environ.get("PGHOST", "127.0.0.1"),
+        # Use explicit IPv4 loopback (127.0.0.1) instead of relying on "localhost" name resolution.
+        "PORT": os.environ.get("PGPORT", "5432"),
     }
 }
+
+pg_password = os.environ.get("PGPASSWORD")
+if pg_password:
+    DATABASES["default"]["PASSWORD"] = pg_password
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators

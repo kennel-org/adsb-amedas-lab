@@ -286,7 +286,7 @@ CREATE TABLE adsb_aircraft_2025_12
      ```ini
      [Service]
      Type=oneshot
-     WorkingDirectory=/home/appuser/adsb-amedas-lab
+     WorkingDirectory=/path/to/adsb-amedas-lab
      ExecStart=/usr/local/bin/dotenvx run -- python3 src/amedas_ingest.py
      User=appuser
      ```
@@ -332,7 +332,7 @@ CREATE TABLE adsb_aircraft_2025_12
      ```ini
      [Service]
      Type=oneshot
-     WorkingDirectory=/home/pi/adsb-amedas-lab
+     WorkingDirectory=/path/to/adsb-amedas-lab
      ExecStart=/usr/local/bin/dotenvx run -- python3 src/adsb_ingest.py
      User=pi
      ```
@@ -446,4 +446,3 @@ adsb-amedas-lab/
    - Grafana / Superset 等で ADS-B × AMeDAS を俯瞰。
 3. データ保持ポリシ
    - 一定期間を過ぎた生データを、パーティション単位でアーカイブ / ダウンロード可能な形に整理。
-
