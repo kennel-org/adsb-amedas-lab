@@ -2,16 +2,19 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.db.models import F, Window
 from django.db.models.functions import RowNumber
+from django.views.decorators.cache import never_cache
 
 from .models import AdsbAircraft
 
 
+@never_cache
 def map_view(request):
     """Render main map view template."""
 
     return render(request, "adsb_map/map.html")
 
 
+@never_cache
 def latest_points_api(request):
     """Return latest ADS-B points as JSON.
 

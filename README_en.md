@@ -123,7 +123,7 @@ Notes (viewer API behavior):
 #### 5.1 Setup (overview)
 
 ```bash
-cd ~/adsb-amedas-lab/web/adsb_viewer
+cd /path/to/adsb-amedas-lab/web/adsb_viewer
 
 # Create and activate a virtual environment
 python -m venv .venv
@@ -138,20 +138,18 @@ cp ../../.env.web.sample ../../.env.web
 ```
 
 - In `web/adsb_viewer/adsb_viewer/settings.py`, the `DATABASES["default"]` configuration:
-  - uses fixed values:
-    - `NAME = "adsb_test"`
-    - `USER = "lab_ro"`
-    - `HOST = "127.0.0.1"`
-    - `PORT = "5432"`
-  - and reads only the password from `os.environ["PGPASSWORD"]` (defaulting to an empty string).
-- `run_dev_server.sh` sources the repository root `.env.web` and then starts Django, so you must create `.env.web` from `.env.web.sample` and set `PGPASSWORD` (and other PG* variables) there.
+  - uses defaults of `NAME=adsb_test`, `USER=lab_ro`, `HOST=127.0.0.1`, and `PORT=5432`;
+  - lets `PGDATABASE`, `PGUSER`, `PGHOST`, `PGPORT`, and `PGPASSWORD` override those defaults when set;
+  - falls back to libpq's standard `~/.pgpass` handling when `PGPASSWORD` is not set.
+- `run_dev_server.sh` sources the repository root `.env.web` and then starts Django, so create `.env.web` from `.env.web.sample` when you need to provide PG* variables explicitly.
+- `run_dev_server.sh` resolves the repository root from its own location, so the clone does not need to live at `~/adsb-amedas-lab`.
 
 #### 5.2 How to start the development server
 
 - Manual start (during development):
 
   ```bash
-  cd ~/adsb-amedas-lab/web/adsb_viewer
+  cd /path/to/adsb-amedas-lab/web/adsb_viewer
   ./run_dev_server.sh
   ```
 
@@ -171,8 +169,8 @@ cp ../../.env.web.sample ../../.env.web
   Type=simple
   User=<your_user>
   Group=<your_user>
-  WorkingDirectory=/home/<your_user>/adsb-amedas-lab/web/adsb_viewer
-  ExecStart=/usr/bin/bash /home/<your_user>/adsb-amedas-lab/web/adsb_viewer/run_dev_server.sh
+  WorkingDirectory=/path/to/adsb-amedas-lab/web/adsb_viewer
+  ExecStart=/usr/bin/bash /path/to/adsb-amedas-lab/web/adsb_viewer/run_dev_server.sh
   Restart=on-failure
   Environment=PYTHONUNBUFFERED=1
 
