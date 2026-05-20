@@ -11,8 +11,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from psycopg2.extras import RealDictCursor
 
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-MAP_HTML = BASE_DIR / "adsb_viewer" / "adsb_map" / "templates" / "adsb_map" / "map.html"
+APP_DIR = Path(__file__).resolve().parent
+MAP_HTML = APP_DIR / "static" / "map.html"
 
 app = FastAPI(title="ADS-B Map Viewer")
 

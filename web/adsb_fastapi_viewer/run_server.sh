@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
 ENV_WEB_FILE="$REPO_ROOT/.env.web"
-VENV_ACTIVATE="$REPO_ROOT/web/adsb_viewer/.venv/bin/activate"
+VENV_ACTIVATE="$REPO_ROOT/.venv/bin/activate"
 HOST="${ADSB_FASTAPI_HOST:-0.0.0.0}"
 PORT="${ADSB_FASTAPI_PORT:-8000}"
 

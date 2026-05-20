@@ -28,13 +28,11 @@ For detailed requirements and architecture, see the documents under `docs/`:
 - `.env.sample`
   - Sample environment variables for the app_server. The real `.env` file is **not** tracked by Git.
 - `.env.web.sample`
-  - Sample database connection settings for the web viewers under `web/adsb_fastapi_viewer/` / `web/adsb_viewer/` (the real `.env.web` is **not** tracked by Git).
+  - Sample database connection settings for the FastAPI web viewer under `web/adsb_fastapi_viewer/` (the real `.env.web` is **not** tracked by Git).
 - `config/`
   - Per-host configuration directories. Real production host directories are ignored by Git.
 - `web/adsb_fastapi_viewer/`
   - Lightweight FastAPI ADS-B map viewer serving `/` and `/api/latest/`.
-- `web/adsb_viewer/`
-  - Legacy Django 4.2-based development web viewer for ADS-B maps.
 
 ## Setup (overview)
 
@@ -46,7 +44,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Note: The shared top-level `requirements.txt` already includes the main libraries needed for database access and the web viewer (such as `requests`, `psycopg2-binary`, `python-dateutil`, `FastAPI`, `uvicorn`, and `Django`). If you need additional libraries for your own experiments, install them separately in your environment.
+Note: The shared top-level `requirements.txt` already includes the main libraries needed for database access and the web viewer (such as `requests`, `psycopg2-binary`, `python-dateutil`, `FastAPI`, and `uvicorn`). If you need additional libraries for your own experiments, install them separately in your environment.
 
 ### 2. Create `.env` for the app_server
 
@@ -105,9 +103,9 @@ dotenvx run -- env-file config/<your_site>/env/adsb.env -- python src/adsb_inges
 
 For production use, refer to the docs for `systemd service + timer` configuration and run the scripts periodically.
 
-### 5. Development web viewer (Django `adsb_viewer`)
+### 5. Web viewer (FastAPI)
 
-On the app_server host, you can run a **development web viewer** using Django. It reads from `adsb_test.adsb_aircraft` and plots recent aircraft positions on a map.
+On the app_server host, you can run a FastAPI web viewer. It reads from `adsb_test.adsb_aircraft` and plots recent aircraft positions on a map.
 
 Notes (viewer API behavior):
 
@@ -117,7 +115,7 @@ Notes (viewer API behavior):
     - `limit`: per-site max rows to return (clamped to **max 5000 rows per site**)
   - If `site` is omitted, the API returns the **latest `limit` rows for each `site_code`** found in the database.
     - Example: if there are two sites and `limit=5000`, the response may include up to 10000 rows.
-- On the client side (`adsb_map/templates/adsb_map/map.html`), points are grouped by `icao24` and rendered as tracks.
+- On the client side (`web/adsb_fastapi_viewer/static/map.html`), points are grouped by `icao24` and rendered as tracks.
   - By default, only the longest tracks are drawn (top K by number of points) via `TOP_K_TRACKS=100`.
   - Track colors indicate temporal order (older → newer) using a `d3.interpolateTurbo` gradient along each track.
   - To avoid unrealistic straight-line interpolation across missing data, segments are skipped when the time gap between consecutive points exceeds a threshold. The current default is `MAX_GAP_SEC=60` (break when gap is greater than 60 seconds).
@@ -125,26 +123,23 @@ Notes (viewer API behavior):
 #### 5.1 Setup (overview)
 
 ```bash
-cd /path/to/adsb-amedas-lab/web/adsb_viewer
+cd /path/to/adsb-amedas-lab
 
 # Create and activate a virtual environment
 python -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies (FastAPI, uvicorn, Django 4.2, psycopg2-binary, etc.)
-pip install -r ../../requirements.txt
+# Install dependencies (FastAPI, uvicorn, psycopg2-binary, etc.)
+pip install -r requirements.txt
 
 # Create the actual .env.web from the sample
-cp ../../.env.web.sample ../../.env.web
-# Edit ../../.env.web and set PGHOST / PGPORT / PGDATABASE / PGUSER / PGPASSWORD for your environment
+cp .env.web.sample .env.web
+# Edit .env.web and set PGHOST / PGPORT / PGDATABASE / PGUSER / PGPASSWORD for your environment
 ```
 
-- In `web/adsb_viewer/adsb_viewer/settings.py`, the `DATABASES["default"]` configuration:
-  - uses defaults of `NAME=adsb_test`, `USER=lab_ro`, `HOST=127.0.0.1`, and `PORT=5432`;
-  - lets `PGDATABASE`, `PGUSER`, `PGHOST`, `PGPORT`, and `PGPASSWORD` override those defaults when set;
-  - falls back to libpq's standard `~/.pgpass` handling when `PGPASSWORD` is not set.
-- `run_dev_server.sh` sources the repository root `.env.web` and then starts Django, so create `.env.web` from `.env.web.sample` when you need to provide PG* variables explicitly.
-- `run_dev_server.sh` resolves the repository root from its own location, so the clone does not need to live at `~/adsb-amedas-lab`.
+- `run_server.sh` sources the repository root `.env.web` and then starts uvicorn.
+- `PGDATABASE`, `PGUSER`, `PGHOST`, `PGPORT`, and `PGPASSWORD` override the default connection values when set.
+- When `PGPASSWORD` is not set, psycopg2 falls back to libpq's standard auth paths such as `~/.pgpass`.
 
 #### 5.2 How to start the web viewer
 
@@ -152,10 +147,10 @@ cp ../../.env.web.sample ../../.env.web
 
   ```bash
   cd /path/to/adsb-amedas-lab/web/adsb_fastapi_viewer
-  ../adsb_viewer/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
+  ../../.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
   ```
 
-  `run_server.sh` reads the repository root `.env.web`, activates `web/adsb_viewer/.venv`, and starts uvicorn. The legacy Django viewer can still be started for development with `web/adsb_viewer/run_dev_server.sh`.
+  `run_server.sh` reads the repository root `.env.web`, activates the repository root `.venv`, and starts uvicorn.
 
 - Automatic start via systemd:
 

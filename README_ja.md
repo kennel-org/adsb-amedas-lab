@@ -23,13 +23,11 @@
 - `.env.sample`
   - app_server 用の環境変数サンプル（実際の `.env` は Git 管理外）
 - `.env.web.sample`
-  - Web ビューア（`web/adsb_fastapi_viewer/` / `web/adsb_viewer/`）が利用する DB 接続情報サンプル（実際の `.env.web` は Git 管理外）
+  - FastAPI Web ビューア（`web/adsb_fastapi_viewer/`）が利用する DB 接続情報サンプル（実際の `.env.web` は Git 管理外）
 - `config/`
   - 各ホストごとの設定を置くディレクトリ（実環境用のディレクトリは `.gitignore` 済み）
 - `web/adsb_fastapi_viewer/`
   - FastAPI による軽量 ADS-B マップビューア（`/` と `/api/latest/` を提供）
-- `web/adsb_viewer/`
-  - 旧 Django 4.2 系 ADS-B マップ用開発ビューア
 
 ## セットアップ手順（概要）
 
@@ -41,7 +39,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-※ 本リポジトリ直下の共通 `requirements.txt` には、DB 接続や Web ビューア開発に必要な主なライブラリ（`requests`, `psycopg2-binary`, `python-dateutil`, `FastAPI`, `uvicorn`, `Django` など）がまとまっています。追加のライブラリが必要な場合は、各自の環境に合わせて適宜インストールしてください。
+※ 本リポジトリ直下の共通 `requirements.txt` には、DB 接続や Web ビューア開発に必要な主なライブラリ（`requests`, `psycopg2-binary`, `python-dateutil`, `FastAPI`, `uvicorn` など）がまとまっています。追加のライブラリが必要な場合は、各自の環境に合わせて適宜インストールしてください。
 
 ### 2. `.env` の作成（app_server 側）
 
@@ -101,9 +99,9 @@ dotenvx run -- env-file config/<your_site>/env/adsb.env -- python src/adsb_inges
 
 本番運用では、docs に記載のとおり `systemd service + timer` で定期実行することを想定しています。
 
-### 5. 開発用 Web ビューア（Django adsb_viewer）
+### 5. Web ビューア（FastAPI）
 
-app_server 相当のホスト上で、PostgreSQL の `adsb_test.adsb_aircraft` を読み取り、直近の航空機位置を地図上に表示するための **開発用 Web ビューア** を Django で動かします。
+app_server 相当のホスト上で、PostgreSQL の `adsb_test.adsb_aircraft` を読み取り、直近の航空機位置を地図上に表示するための Web ビューアを FastAPI で動かします。
 
 補足（表示用 API の仕様）:
 
@@ -113,7 +111,7 @@ app_server 相当のホスト上で、PostgreSQL の `adsb_test.adsb_aircraft` �
     - `limit`: 取得上限（ただし **1 site あたり最大 5000 件**に制限）
   - `site` を省略した場合は、DB 内の `site_code` それぞれについて **最新から `limit` 件ずつ**取得します。
     - 例: site が 2 つで `limit=5000` の場合、最大 10000 件になります。
-- クライアント側（`adsb_map/templates/adsb_map/map.html`）では、取得した点群を `icao24` ごとにグルーピングし、軌跡を描画します。
+- クライアント側（`web/adsb_fastapi_viewer/static/map.html`）では、取得した点群を `icao24` ごとにグルーピングし、軌跡を描画します。
   - 既定では、点数の多い軌跡（`icao24` グループ）上位のみを描画するため `TOP_K_TRACKS=100` を設定しています。
   - 軌跡の色は、時間方向（古い→新しい）を表現するため、軌跡内の点の並び（時系列ソート後の進行度）に応じて `d3.interpolateTurbo` のグラデーションを適用します。
   - データ欠損による不自然な直線補間を避けるため、連続点の時間差が一定値を超える区間は線を引かないようにしており、既定では `MAX_GAP_SEC=60`（60 秒超のギャップで分断）です。
@@ -121,27 +119,23 @@ app_server 相当のホスト上で、PostgreSQL の `adsb_test.adsb_aircraft` �
 #### 5.1 セットアップ（概要）
 
 ```bash
-cd /path/to/adsb-amedas-lab/web/adsb_viewer
+cd /path/to/adsb-amedas-lab
 
 # 仮想環境を作成して有効化
 python -m venv .venv
 source .venv/bin/activate
 
-# 依存パッケージをインストール（FastAPI / uvicorn / Django 4.2 / psycopg2-binary など）
-pip install -r ../../requirements.txt
+# 依存パッケージをインストール（FastAPI / uvicorn / psycopg2-binary など）
+pip install -r requirements.txt
 
 # Web ビューア用の DB 接続情報サンプルから実ファイルを作成
-cp ../../.env.web.sample ../../.env.web
-# ../../.env.web を編集して、PGHOST / PGPORT / PGDATABASE / PGUSER / PGPASSWORD を自分の環境に合わせて設定
+cp .env.web.sample .env.web
+# .env.web を編集して、PGHOST / PGPORT / PGDATABASE / PGUSER / PGPASSWORD を自分の環境に合わせて設定
 ```
 
-- `web/adsb_viewer/adsb_viewer/settings.py` の `DATABASES["default"]` では、
-  - 既定値として `NAME=adsb_test`, `USER=lab_ro`, `HOST=127.0.0.1`, `PORT=5432` を使い、
-  - `PGDATABASE`, `PGUSER`, `PGHOST`, `PGPORT`, `PGPASSWORD` が設定されていればそれを優先します。
-  - `PGPASSWORD` が未設定なら、libpq 標準の `~/.pgpass` フォールバックも利用できます。
-- `run_dev_server.sh` はリポジトリルートの `.env.web` を `source` してから Django を起動するため、
-  - `.env.web.sample` → `.env.web` を作成し、必要に応じて PG* 変数を設定してください。
-  - スクリプト自身の配置場所からリポジトリルートを解決するため、クローン先は `~/adsb-amedas-lab` 固定である必要はありません。
+- `run_server.sh` はリポジトリルートの `.env.web` を `source` してから uvicorn を起動します。
+- `PGDATABASE`, `PGUSER`, `PGHOST`, `PGPORT`, `PGPASSWORD` が設定されていればそれを優先します。
+- `PGPASSWORD` が未設定なら、libpq 標準の `~/.pgpass` フォールバックも利用できます。
 
 #### 5.2 Web ビューアの起動方法
 
@@ -149,11 +143,10 @@ cp ../../.env.web.sample ../../.env.web
 
   ```bash
   cd /path/to/adsb-amedas-lab/web/adsb_fastapi_viewer
-  ../adsb_viewer/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
+  ../../.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
   ```
 
-  - `run_server.sh` を使う場合は、リポジトリルートの `.env.web` を読み込み、`web/adsb_viewer/.venv` を有効化して uvicorn を起動します。
-  - 旧 Django 版を開発用途で使う場合は `web/adsb_viewer/run_dev_server.sh` を利用できます。
+  - `run_server.sh` を使う場合は、リポジトリルートの `.env.web` を読み込み、リポジトリ直下 `.venv` を有効化して uvicorn を起動します。
 
 - systemd 経由での自動起動:
 
