@@ -1,0 +1,17 @@
+[Unit]
+Description=ADS-B Map Viewer FastAPI server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/masaya/projects/adsb-amedas-lab/web/adsb_fastapi_viewer
+ExecStart=/home/masaya/projects/adsb-amedas-lab/web/adsb_fastapi_viewer/run_server.sh
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=ADSB_FASTAPI_HOST=0.0.0.0
+Environment=ADSB_FASTAPI_PORT=8000
+
+[Install]
+WantedBy=default.target

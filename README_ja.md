@@ -23,11 +23,13 @@
 - `.env.sample`
   - app_server 用の環境変数サンプル（実際の `.env` は Git 管理外）
 - `.env.web.sample`
-  - Django 開発用 Web ビューア（`web/adsb_viewer/`）が利用する DB 接続情報サンプル（実際の `.env.web` は Git 管理外）
+  - Web ビューア（`web/adsb_fastapi_viewer/` / `web/adsb_viewer/`）が利用する DB 接続情報サンプル（実際の `.env.web` は Git 管理外）
 - `config/`
   - 各ホストごとの設定を置くディレクトリ（実環境用のディレクトリは `.gitignore` 済み）
+- `web/adsb_fastapi_viewer/`
+  - FastAPI による軽量 ADS-B マップビューア（`/` と `/api/latest/` を提供）
 - `web/adsb_viewer/`
-  - Django 4.2 系による ADS-B マップ用開発ビューア（`adsb_viewer.settings` では DB 名 `adsb_test`・ユーザ `lab_ro`・ホスト `127.0.0.1` を固定し、パスワードのみ環境変数 `PGPASSWORD` から参照）
+  - 旧 Django 4.2 系 ADS-B マップ用開発ビューア
 
 ## セットアップ手順（概要）
 
@@ -39,7 +41,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-※ 本リポジトリ直下の共通 `requirements.txt` には、DB 接続や Web ビューア開発に必要な主なライブラリ（`requests`, `psycopg2-binary`, `python-dateutil`, `Django` など）がまとまっています。追加のライブラリが必要な場合は、各自の環境に合わせて適宜インストールしてください。
+※ 本リポジトリ直下の共通 `requirements.txt` には、DB 接続や Web ビューア開発に必要な主なライブラリ（`requests`, `psycopg2-binary`, `python-dateutil`, `FastAPI`, `uvicorn`, `Django` など）がまとまっています。追加のライブラリが必要な場合は、各自の環境に合わせて適宜インストールしてください。
 
 ### 2. `.env` の作成（app_server 側）
 
@@ -125,10 +127,10 @@ cd /path/to/adsb-amedas-lab/web/adsb_viewer
 python -m venv .venv
 source .venv/bin/activate
 
-# 依存パッケージをインストール（Django 4.2 / psycopg2-binary など）
+# 依存パッケージをインストール（FastAPI / uvicorn / Django 4.2 / psycopg2-binary など）
 pip install -r ../../requirements.txt
 
-# Django 用の DB 接続情報サンプルから実ファイルを作成
+# Web ビューア用の DB 接続情報サンプルから実ファイルを作成
 cp ../../.env.web.sample ../../.env.web
 # ../../.env.web を編集して、PGHOST / PGPORT / PGDATABASE / PGUSER / PGPASSWORD を自分の環境に合わせて設定
 ```
@@ -141,48 +143,50 @@ cp ../../.env.web.sample ../../.env.web
   - `.env.web.sample` → `.env.web` を作成し、必要に応じて PG* 変数を設定してください。
   - スクリプト自身の配置場所からリポジトリルートを解決するため、クローン先は `~/adsb-amedas-lab` 固定である必要はありません。
 
-#### 5.2 開発サーバの起動方法
+#### 5.2 Web ビューアの起動方法
 
-- 手動起動（開発時）:
+- FastAPI 版の手動起動:
 
   ```bash
-  cd /path/to/adsb-amedas-lab/web/adsb_viewer
-  ./run_dev_server.sh
+  cd /path/to/adsb-amedas-lab/web/adsb_fastapi_viewer
+  ../adsb_viewer/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
   ```
 
-  - スクリプト内で `.env.web` を読み込み、`.venv` を有効化したうえで `python manage.py runserver 0.0.0.0:8000` を実行します。
+  - `run_server.sh` を使う場合は、リポジトリルートの `.env.web` を読み込み、`web/adsb_viewer/.venv` を有効化して uvicorn を起動します。
+  - 旧 Django 版を開発用途で使う場合は `web/adsb_viewer/run_dev_server.sh` を利用できます。
 
-- systemd 経由での自動起動（開発用）:
+- systemd 経由での自動起動:
 
-  - 例: `/etc/systemd/system/adsb-viewer.service`
+  - 例: `~/.config/systemd/user/adsb-map-fastapi.service`
 
     ```ini
     [Unit]
-    Description=ADS-B Django viewer dev server
-    After=network.target postgresql.service
+    Description=ADS-B Map Viewer FastAPI server
+    After=network-online.target
     Wants=network-online.target
 
     [Service]
     Type=simple
-    User=<your_user>
-    Group=<your_user>
-    WorkingDirectory=/path/to/adsb-amedas-lab/web/adsb_viewer
-    ExecStart=/usr/bin/bash /path/to/adsb-amedas-lab/web/adsb_viewer/run_dev_server.sh
-    Restart=on-failure
+    WorkingDirectory=/path/to/adsb-amedas-lab/web/adsb_fastapi_viewer
+    ExecStart=/path/to/adsb-amedas-lab/web/adsb_fastapi_viewer/run_server.sh
+    Restart=always
+    RestartSec=5
     Environment=PYTHONUNBUFFERED=1
+    Environment=ADSB_FASTAPI_HOST=0.0.0.0
+    Environment=ADSB_FASTAPI_PORT=8000
 
     [Install]
-    WantedBy=multi-user.target
+    WantedBy=default.target
     ```
 
   - 有効化・起動例:
 
     ```bash
-    sudo systemctl daemon-reload
-    sudo systemctl enable --now adsb-viewer.service
+    systemctl --user daemon-reload
+    systemctl --user enable --now adsb-map-fastapi.service
     ```
 
-  - 以降はホスト再起動後も `adsb-viewer.service` により Django ビューアが自動起動します。
+  - 以降はホスト再起動後も `adsb-map-fastapi.service` により FastAPI ビューアが自動起動します。
 
 #### 5.3 systemd 経由での制御例
 

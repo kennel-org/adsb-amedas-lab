@@ -28,11 +28,13 @@ For detailed requirements and architecture, see the documents under `docs/`:
 - `.env.sample`
   - Sample environment variables for the app_server. The real `.env` file is **not** tracked by Git.
 - `.env.web.sample`
-  - Sample database connection settings for the Django development web viewer under `web/adsb_viewer/` (the real `.env.web` is **not** tracked by Git).
+  - Sample database connection settings for the web viewers under `web/adsb_fastapi_viewer/` / `web/adsb_viewer/` (the real `.env.web` is **not** tracked by Git).
 - `config/`
   - Per-host configuration directories. Real production host directories are ignored by Git.
+- `web/adsb_fastapi_viewer/`
+  - Lightweight FastAPI ADS-B map viewer serving `/` and `/api/latest/`.
 - `web/adsb_viewer/`
-  - Django 4.2-based development web viewer for ADS-B maps. The `adsb_viewer.settings` module uses fixed values for `NAME="adsb_test"`, `USER="lab_ro"`, `HOST="127.0.0.1"`, `PORT="5432"`, and reads the password from the `PGPASSWORD` environment variable.
+  - Legacy Django 4.2-based development web viewer for ADS-B maps.
 
 ## Setup (overview)
 
@@ -44,7 +46,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Note: The shared top-level `requirements.txt` already includes the main libraries needed for database access and the web viewer (such as `requests`, `psycopg2-binary`, `python-dateutil`, and `Django`). If you need additional libraries for your own experiments, install them separately in your environment.
+Note: The shared top-level `requirements.txt` already includes the main libraries needed for database access and the web viewer (such as `requests`, `psycopg2-binary`, `python-dateutil`, `FastAPI`, `uvicorn`, and `Django`). If you need additional libraries for your own experiments, install them separately in your environment.
 
 ### 2. Create `.env` for the app_server
 
@@ -129,7 +131,7 @@ cd /path/to/adsb-amedas-lab/web/adsb_viewer
 python -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies (Django 4.2, psycopg2-binary, etc.)
+# Install dependencies (FastAPI, uvicorn, Django 4.2, psycopg2-binary, etc.)
 pip install -r ../../requirements.txt
 
 # Create the actual .env.web from the sample
@@ -144,48 +146,49 @@ cp ../../.env.web.sample ../../.env.web
 - `run_dev_server.sh` sources the repository root `.env.web` and then starts Django, so create `.env.web` from `.env.web.sample` when you need to provide PG* variables explicitly.
 - `run_dev_server.sh` resolves the repository root from its own location, so the clone does not need to live at `~/adsb-amedas-lab`.
 
-#### 5.2 How to start the development server
+#### 5.2 How to start the web viewer
 
-- Manual start (during development):
+- Manual start for the FastAPI viewer:
 
   ```bash
-  cd /path/to/adsb-amedas-lab/web/adsb_viewer
-  ./run_dev_server.sh
+  cd /path/to/adsb-amedas-lab/web/adsb_fastapi_viewer
+  ../adsb_viewer/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
   ```
 
-  This script reads `.env.web`, activates `.venv`, and runs `python manage.py runserver 0.0.0.0:8000`.
+  `run_server.sh` reads the repository root `.env.web`, activates `web/adsb_viewer/.venv`, and starts uvicorn. The legacy Django viewer can still be started for development with `web/adsb_viewer/run_dev_server.sh`.
 
-- Automatic start via systemd (development use):
+- Automatic start via systemd:
 
-  Example unit file `/etc/systemd/system/adsb-viewer.service`:
+  Example unit file `~/.config/systemd/user/adsb-map-fastapi.service`:
 
   ```ini
   [Unit]
-  Description=ADS-B Django viewer dev server
-  After=network.target postgresql.service
+  Description=ADS-B Map Viewer FastAPI server
+  After=network-online.target
   Wants=network-online.target
 
   [Service]
   Type=simple
-  User=<your_user>
-  Group=<your_user>
-  WorkingDirectory=/path/to/adsb-amedas-lab/web/adsb_viewer
-  ExecStart=/usr/bin/bash /path/to/adsb-amedas-lab/web/adsb_viewer/run_dev_server.sh
-  Restart=on-failure
+  WorkingDirectory=/path/to/adsb-amedas-lab/web/adsb_fastapi_viewer
+  ExecStart=/path/to/adsb-amedas-lab/web/adsb_fastapi_viewer/run_server.sh
+  Restart=always
+  RestartSec=5
   Environment=PYTHONUNBUFFERED=1
+  Environment=ADSB_FASTAPI_HOST=0.0.0.0
+  Environment=ADSB_FASTAPI_PORT=8000
 
   [Install]
-  WantedBy=multi-user.target
+  WantedBy=default.target
   ```
 
   Enable and start:
 
   ```bash
-  sudo systemctl daemon-reload
-  sudo systemctl enable --now adsb-viewer.service
+  systemctl --user daemon-reload
+  systemctl --user enable --now adsb-map-fastapi.service
   ```
 
-  After that, the Django viewer will be automatically started on boot by `adsb-viewer.service`.
+  After that, the FastAPI viewer will be automatically started on boot by `adsb-map-fastapi.service`.
 
 #### 5.3 systemd control examples
 
